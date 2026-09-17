@@ -731,6 +731,26 @@ fn append_matcher_groups(
                     display_order: *display_order,
                     kind,
                 });
+            } else if enabled {
+                // The hook is enabled but its trust status keeps it from running,
+                // and --dangerously-bypass-hook-trust is not set. Without a warning
+                // this drop is silent in headless runs (codex exec), where the
+                // interactive trust review is not available. Name the hook and its
+                // hooks.state key so the reason is visible on the same output the
+                // sibling warnings above use.
+                let key =
+                    crate::hook_key(&source.key_source, event_name, group_index, handler_index);
+                let reason = match trust_status {
+                    HookTrustStatus::Modified => "was modified since it was last trusted",
+                    _ => "is not trusted",
+                };
+                warnings.push(format!(
+                    "hook {} in {} {}, so it will not run; trust it through the interactive hook review or pass --dangerously-bypass-hook-trust. Trust key: {}",
+                    hook_event_name_label(event_name),
+                    source.path.display(),
+                    reason,
+                    key,
+                ));
             }
             *display_order += 1;
         }
@@ -1500,6 +1520,48 @@ mod tests {
         assert_eq!(hook_entries.len(), 1);
         assert_eq!(hook_entries[0].trust_status, HookTrustStatus::Untrusted);
         assert_eq!(hook_entries[0].enabled, true);
+    }
+
+    #[test]
+    fn untrusted_enabled_handler_is_dropped_with_diagnostic_when_not_bypassed() {
+        let mut handlers = Vec::new();
+        let mut hook_entries = Vec::new();
+        let mut warnings = Vec::new();
+        let mut display_order = 0;
+        let source_path = source_path();
+        let hook_states = std::collections::HashMap::new();
+
+        append_matcher_groups(
+            &mut handlers,
+            &mut hook_entries,
+            &mut warnings,
+            &mut display_order,
+            &mut unmanaged_hook_handler_source(
+                &source_path,
+                &hook_states,
+                /*bypass_hook_trust*/ false,
+            ),
+            HookEventName::PreToolUse,
+            vec![command_group(Some("Bash"))],
+        );
+
+        // The enabled but untrusted hook is dropped, so it does not run,
+        assert_eq!(handlers, Vec::<ConfiguredHandler>::new());
+        // but it is still recorded and the drop is no longer silent: a
+        // warning names the hook and its hooks.state trust key.
+        assert_eq!(hook_entries.len(), 1);
+        assert_eq!(hook_entries[0].trust_status, HookTrustStatus::Untrusted);
+        assert_eq!(hook_entries[0].enabled, true);
+        assert_eq!(
+            warnings,
+            vec![format!(
+                "hook PreToolUse in {} is not trusted, so it will not run; \
+                 trust it through the interactive hook review or pass \
+                 --dangerously-bypass-hook-trust. Trust key: {}:pre_tool_use:0:0",
+                source_path.display(),
+                source_path.display(),
+            )]
+        );
     }
 
     #[test]

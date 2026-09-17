@@ -1187,7 +1187,19 @@ fn allow_managed_hooks_only_false_keeps_unmanaged_hooks() {
         mcp_executor(),
     );
 
-    assert!(engine.warnings().is_empty());
+    let warnings = engine.warnings();
+    assert_eq!(
+        warnings.len(),
+        1,
+        "expected one trust-skip diagnostic, got {warnings:?}"
+    );
+    assert!(
+        warnings[0].contains("PreToolUse")
+            && warnings[0].contains("is not trusted")
+            && warnings[0].contains("pre_tool_use:0:0"),
+        "unexpected warning: {}",
+        warnings[0]
+    );
     assert!(engine.handlers.is_empty());
     let discovered = super::discovery::discover_handlers(
         Some(&config_layer_stack),
@@ -1245,7 +1257,19 @@ fn allow_managed_hooks_only_in_config_toml_does_not_enable_policy() {
         mcp_executor(),
     );
 
-    assert!(engine.warnings().is_empty());
+    let warnings = engine.warnings();
+    assert_eq!(
+        warnings.len(),
+        1,
+        "expected one trust-skip diagnostic, got {warnings:?}"
+    );
+    assert!(
+        warnings[0].contains("PreToolUse")
+            && warnings[0].contains("is not trusted")
+            && warnings[0].contains("pre_tool_use:0:0"),
+        "unexpected warning: {}",
+        warnings[0]
+    );
     assert!(engine.handlers.is_empty());
     let discovered = super::discovery::discover_handlers(
         Some(&config_layer_stack),
